@@ -76,9 +76,6 @@ class waffleCutter():
         #WaffleSliceGizmo is the group that is created.  Iterate through it, find a useable transform, get all the shapes, and assign
         #All the shapes to a transform
         general.delete("WaffleSliceGizmo", ch = True)
-        general.parent(general.group(n = "slice_proxy_x", em = True), "WaffleSliceGizmo")
-        general.parent(general.group(n = "slice_proxy_y", em = True), "WaffleSliceGizmo")
-        general.rotate("slice_proxy_y", (90, 0, 0))
         general.select("WaffleSliceGizmo")
 
     def deleteGizmo(self):
@@ -86,17 +83,50 @@ class waffleCutter():
             general.delete("WaffleSliceGizmo")
     
     def performSlice(self):
-        step_size = windows.floatSliderGrp("stepSizeSlider", q = True, v = True)
-        #print(step_size)
-        step_count = int(windows.floatSliderGrp("stepCountSlider", q = True, v = True))
-        #print(step_count)
+        #Make sure theres a gizmo, otherwise theres no point in doing anything
         if general.objExists("WaffleSliceGizmo"):
+            #Get the step size and step count from the appropriate sliders
+            step_size = windows.floatSliderGrp("stepSizeSlider", q = True, v = True)
+            step_count = int(windows.floatSliderGrp("stepCountSlider", q = True, v = True))
+            #Get the axes filter from the radio buttons
+            axes = windows.radioButtonGrp("axesRadioButtonGrp", q = True, sl = True)
+            #Iterate through the selected objects and create an array of sliceable ones
+            sliceArray = []
             for child in general.ls(sl = True):
                 if (child!="WaffleSliceGizmo"):
+                    #Make sure the selection is either a transform or mesh
                     if (general.objectType(child)=="transform" or general.objectType(child)=="mesh"):
+                        sliceArray.append(child)
+            else:
+                #If anything was added to the array, then move forwards with the waffle slice
+                if len(sliceArray)>0:
+                    #Create the slicing proxies that will push the proper transforms and rotates into the slice arguments
+                    general.group(n = "slice_proxy_x", em = True)
+                    general.xform("slice_proxy_x", t=[general.getAttr("WaffleSliceGizmo.translateX"),
+                                                 general.getAttr("WaffleSliceGizmo.translateY"),
+                                                 general.getAttr("WaffleSliceGizmo.translateZ"),]
+                                                 , ro = [general.getAttr("WaffleSliceGizmo.rotateX"),
+                                                 general.getAttr("WaffleSliceGizmo.rotateY"),
+                                                 general.getAttr("WaffleSliceGizmo.rotateZ"),]
+                                                 ,ws = True)
+                    general.group(n = "slice_proxy_y", em = True)
+                    general.xform("slice_proxy_y", t=[general.getAttr("WaffleSliceGizmo.translateX"),
+                                                 general.getAttr("WaffleSliceGizmo.translateY"),
+                                                 general.getAttr("WaffleSliceGizmo.translateZ"),]
+                                                 , ro = [general.getAttr("WaffleSliceGizmo.rotateX"),
+                                                 general.getAttr("WaffleSliceGizmo.rotateY"),
+                                                 general.getAttr("WaffleSliceGizmo.rotateZ"),]
+                                                 ,ws = True)
+                    general.rotate("slice_proxy_y", (90, 0, 0), r = True, os = True)
+                    general.parent("slice_proxy_x", "WaffleSliceGizmo")
+                    general.parent("slice_proxy_y", "WaffleSliceGizmo")
+                    #Iterate through the list of objects
+                    for child in sliceArray:
+                        #Move the slicers by half of the total distance they're going to need to slice through
                         general.move("slice_proxy_x", [0,0,(-1*((step_size*step_count)/2))] , r = True, ls = True)#, z = True)
                         general.move("slice_proxy_y", [0, (-1*((step_size*step_count)/2)),0], r = True, ls = True)#, y = True)
-                        axes = windows.radioButtonGrp("axesRadioButtonGrp", q = True, sl = True)
+                        #Get the options for x, y, or both
+                        #Do the slices, and for each iteration, bump each proxy forwards by their allotted amount
                         for i in range(step_count):
                             if (axes == 1 or axes == 3):
                                 general.move("slice_proxy_x", [0, 0, step_size] , r = True, ls = True)#, z = True)
@@ -111,14 +141,21 @@ class waffleCutter():
                                 rot = general.xform("slice_proxy_y", ws = True, q = True, ro = True)
                                 modeling.polyCut(child, ro = rot , pc = pos)
                                 general.delete(child, ch = True)
+                        else:
+                            #Reset the position of the proxies after each object so they dont fly off into the distance
+                            general.xform("slice_proxy_x", t=[general.getAttr("WaffleSliceGizmo.translateX"),
+                                                         general.getAttr("WaffleSliceGizmo.translateY"),
+                                                         general.getAttr("WaffleSliceGizmo.translateZ"),]
+                                                         , ws = True)
+                            general.xform("slice_proxy_y", t=[general.getAttr("WaffleSliceGizmo.translateX"),
+                                                         general.getAttr("WaffleSliceGizmo.translateY"),
+                                                         general.getAttr("WaffleSliceGizmo.translateZ"),]
+                                                         , ws = True)
                             
-                        general.setAttr("slice_proxy_x.translateX", 0)
-                        general.setAttr("slice_proxy_x.translateY", 0)
-                        general.setAttr("slice_proxy_x.translateZ", 0)
-                
-                        general.setAttr("slice_proxy_y.translateX", 0)
-                        general.setAttr("slice_proxy_y.translateY", 0)
-                        general.setAttr("slice_proxy_y.translateZ", 0)
+                    else:
+                        #Clean up the slice proxies
+                        general.delete("slice_proxy_x")
+                        general.delete("slice_proxy_y")
         else:
             print("No slice gizmo")
     
@@ -131,9 +168,7 @@ class waffleCutter():
         windows.columnLayout() #Overall column layout
         ##MORE COLUMN LAYOUT CONTROLS HERE
         ##
-        ###
-        ##
-        #
+
         windows.frameLayout("waffleCutterGizmos", l = "Waffle Cutter Gizmo", w = 300)
         windows.rowLayout(nc = 3)
         windows.iconTextButton("createGizmoButton", style = "iconAndTextVertical", l = "Create Gizmo", image1 = "menuIconModify.png", c = lambda: self.createGizmo())
@@ -152,9 +187,7 @@ class waffleCutter():
         windows.setParent(u = True)
         ##MORE COLUMN LAYOUT CONTROLS HERE
         ##
-        ###
-        ##
-        #
+
         windows.button("waffleSliceButton", l = "Waffle Slice", h = 50, w = 300, c = lambda event: self.performSlice())
         windows.setParent(u = True)
                 #Show the window
